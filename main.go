@@ -4,51 +4,77 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/printer"
 	"go/token"
 	"os"
 	"strings"
 )
 
 func main() {
-	var interfaces, constructors, filenames []string
+	var interfaceName string
+	var constructors, filenames []string
+	var createAgentInterface bool
 
-	for i := 1; i < len(os.Args); i++ {
+	if os.Args[1] != "agent" {
+		fatalError(fmt.Errorf("Unrecognized command: %s", os.Args[1]))
+	}
+
+	if len(os.Args) < 3 {
+		fatalError(fmt.Errorf("Please provide an interface name."))
+	}
+
+	interfaceName = os.Args[2]
+
+	for i := 3; i < len(os.Args); i++ {
 		arg := os.Args[i]
 
 		if strings.HasPrefix(arg, "-") {
 			switch arg[1:] {
 			case "i":
-				interfaces = append(interfaces, os.Args[i+1])
+				filenames = append(filenames, os.Args[i+1])
+				i++
 			case "c":
 				constructors = append(constructors, os.Args[i+1])
+				i++
+			case "I":
+				createAgentInterface = true
 			default:
-				panic(fmt.Errorf("Unrecognized option: %s", arg))
+				fatalError(fmt.Errorf("Unrecognized option: %s", arg))
 			}
-
-			i++
 		} else {
-			filenames = append(filenames, os.Args[i])
+			fatalError(fmt.Errorf("Unexpected parameter: %s", os.Args[i]))
 		}
 	}
+
+	parsed, err := parseFiles(filenames)
+	fatalError(err)
+
+	_, err = createAgent(interfaceName, parsed)
+	fatalError(err)
+
+	if createAgentInterface {
+		fmt.Println("TODO: Create the agent base interface.")
+	}
+}
+
+func fatalError(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func parseFiles(filenames []string) ([]*ast.File, error) {
+	var parsed []*ast.File
 
 	fset := token.NewFileSet()
 	for _, filename := range(filenames) {
-		parsed, err := parser.ParseFile(fset, filename, nil, 0)
+		p, err := parser.ParseFile(fset, filename, nil, 0)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
-		for _, decl := range(parsed.Decls) {
-			if gendecl, ok := decl.(*ast.GenDecl); ok && gendecl.Tok == token.TYPE {
-				for _, spec := range(gendecl.Specs) {
-					if _, ok := spec.(*ast.TypeSpec).Type.(*ast.InterfaceType); ok {
-						printer.Fprint(os.Stdout, token.NewFileSet(), gendecl)
-						// fmt.Println("type", spec.(*ast.TypeSpec).Name, "interface", "{")
-						// fmt.Println("}")
-					}
-				}
-			}
-		}
+		parsed = append(parsed, p)
 	}
+
+	return parsed, nil
 }
