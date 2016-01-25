@@ -10,8 +10,9 @@ import (
 )
 
 func main() {
-	var interfaceName string
-	var constructors, filenames []string
+	var err error
+	var interfaceName, packageName, inputFile string
+	var constructors []string
 	var createAgentInterface bool
 
 	if os.Args[1] != "agent" {
@@ -30,10 +31,19 @@ func main() {
 		if strings.HasPrefix(arg, "-") {
 			switch arg[1:] {
 			case "i":
-				filenames = append(filenames, os.Args[i+1])
+				if inputFile != "" {
+					fatalError(fmt.Errorf("Only one input file can be specified."))
+				}
+				inputFile = os.Args[i+1]
 				i++
 			case "c":
 				constructors = append(constructors, os.Args[i+1])
+				i++
+			case "p":
+				if packageName != "" {
+					fatalError(fmt.Errorf("Only one package name can be specified."))
+				}
+				packageName = os.Args[i+1]
 				i++
 			case "I":
 				createAgentInterface = true
@@ -45,14 +55,22 @@ func main() {
 		}
 	}
 
-	parsed, err := parseFiles(filenames)
-	fatalError(err)
+	var parsed *ast.File
+	if inputFile != "" {
+		parsed, err = parseFile(inputFile)
+		fatalError(err)
+	}
+	
+	writeCodeGenerationWarning(os.Stdout)
 
-	_, err = createAgent(interfaceName, parsed)
-	fatalError(err)
+	writePackageName(os.Stdout, packageName)
 
 	if createAgentInterface {
-		fmt.Println("TODO: Create the agent base interface.")
+		writeAgentInterface(os.Stdout)
+	}
+
+	if parsed != nil {
+		writeAgent(os.Stdout, interfaceName, parsed)
 	}
 }
 
@@ -63,17 +81,13 @@ func fatalError(err error) {
 	}
 }
 
-func parseFiles(filenames []string) ([]*ast.File, error) {
-	var parsed []*ast.File
+func parseFile(filename string) (*ast.File, error) {
+	var parsed *ast.File
 
 	fset := token.NewFileSet()
-	for _, filename := range(filenames) {
-		p, err := parser.ParseFile(fset, filename, nil, 0)
-		if err != nil {
-			return nil, err
-		}
-
-		parsed = append(parsed, p)
+	parsed, err := parser.ParseFile(fset, filename, nil, 0)
+	if err != nil {
+		return nil, err
 	}
 
 	return parsed, nil
