@@ -3,8 +3,8 @@
 package examples
 
 type Counter interface {
-	Add(int64) int64
-	Sub(int64) int64
+	Add(val int64) int64
+	Sub(val int64) int64
 	Total() int64
 }
 

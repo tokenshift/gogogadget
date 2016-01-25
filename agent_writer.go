@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/printer"
 	"go/token"
 	"io"
 )
@@ -42,6 +43,8 @@ const (
 }
 
 func writeAgent(out io.Writer, interfaceName string, parsed *ast.File) {
+	fset := token.NewFileSet()
+
 	for _, decl := range(parsed.Decls) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range(genDecl.Specs) {
@@ -52,8 +55,52 @@ func writeAgent(out io.Writer, interfaceName string, parsed *ast.File) {
 						fmt.Fprintf(out, "\twrapped %s\n", interfaceName)
 
 						for _, method := range(iface.Methods.List) {
+							mType := method.Type.(*ast.FuncType)
 							for _, name := range(method.Names) {
-								fmt.Fprintf(out, "\t%s() (returns)\n", name)
+								fmt.Fprintf(out, "\t%s(", name)
+
+								// Parameter types
+								for i, param := range(mType.Params.List) {
+									if i != 0 {
+										fmt.Fprint(out, ", ")
+									}
+
+									for j, pname := range(param.Names) {
+										if j == 0 {
+											fmt.Fprintf(out, "%s", pname)
+										} else {
+											fmt.Fprintf(out, ", %s", pname)
+										}
+									}
+
+									fmt.Fprint(out, " ")
+									printer.Fprint(out, fset, param.Type)
+								}
+
+								fmt.Fprintf(out, ") (")
+
+								// Return types
+								for i, param := range(mType.Results.List) {
+									if i != 0 {
+										fmt.Fprint(out, ", ")
+									}
+
+									for j, pname := range(param.Names) {
+										if j == 0 {
+											fmt.Fprintf(out, "%s", pname)
+										} else {
+											fmt.Fprintf(out, ", %s", pname)
+										}
+									}
+
+									if i != 0 {
+										fmt.Fprint(out, " ")
+									}
+									
+									printer.Fprint(out, fset, param.Type)
+								}
+
+								fmt.Fprintf(out, ")\n")
 							}
 						}
 
