@@ -56,21 +56,22 @@ func main() {
 	}
 
 	var parsed *ast.File
+	var writer AgentWriter
 	if inputFile != "" {
 		parsed, err = parseFile(inputFile)
 		fatalError(err)
+		writer = NewAgentWriter(interfaceName, packageName, parsed)
 	}
-	
-	writeCodeGenerationWarning(os.Stdout)
 
-	writePackageName(os.Stdout, packageName)
+	WriteCodeGenerationWarning(os.Stdout)
+	writer.WritePackageName(os.Stdout)
 
 	if createAgentInterface {
-		writeAgentInterface(os.Stdout)
+		WriteAgentInterface(os.Stdout)
 	}
 
-	if parsed != nil {
-		writeAgent(os.Stdout, interfaceName, parsed)
+	if inputFile != "" {
+		writer.WriteAgent(os.Stdout)
 	}
 }
 

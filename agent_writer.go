@@ -8,17 +8,26 @@ import (
 	"io"
 )
 
-func writeCodeGenerationWarning(out io.Writer) {
+type AgentWriter struct {
+	InterfaceName, PackageName string
+	Input *ast.File
+}
+
+func NewAgentWriter(interfaceName, packageName string, parsed *ast.File) AgentWriter {
+	return AgentWriter{
+		interfaceName,
+		packageName,
+		parsed,
+	}
+}
+
+func WriteCodeGenerationWarning(out io.Writer) {
 	fmt.Fprintln(out, "// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget")
 	fmt.Fprintln(out, "// ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN")
 	fmt.Fprintln(out, "")
 }
 
-func writePackageName(out io.Writer, packageName string) {
-	fmt.Fprintf(out, "package %s\n\n", packageName)
-}
-
-func writeAgentInterface(out io.Writer) {
+func WriteAgentInterface(out io.Writer) {
 	fmt.Fprintln(out, `type Agent interface {
 	Start()
 	Stop()
@@ -42,17 +51,21 @@ const (
 	fmt.Fprintln(out, "")
 }
 
-func writeAgent(out io.Writer, interfaceName string, parsed *ast.File) {
+func (w AgentWriter) WritePackageName(out io.Writer) {
+	fmt.Fprintf(out, "package %s\n\n", w.PackageName)
+}
+
+func (w AgentWriter) WriteAgent(out io.Writer) {
 	fset := token.NewFileSet()
 
-	for _, decl := range(parsed.Decls) {
+	for _, decl := range(w.Input.Decls) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range(genDecl.Specs) {
 				tspec := spec.(*ast.TypeSpec)
-				if tspec.Name.Name == interfaceName {
+				if tspec.Name.Name == w.InterfaceName {
 					if iface, ok := tspec.Type.(*ast.InterfaceType); ok {
-						fmt.Fprintf(out, "type %sAgent struct {\n", interfaceName)
-						fmt.Fprintf(out, "\twrapped %s\n", interfaceName)
+						fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
+						fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
 
 						for _, method := range(iface.Methods.List) {
 							mType := method.Type.(*ast.FuncType)
