@@ -24,7 +24,11 @@ const (
 type CounterAgent struct {
 	wrapped Counter
 
-	reqAdd chan struct{int64}
+	reqAdd chan struct{
+		val int64
+		a int64
+		b int64
+	}
 	resAdd chan struct{int64}
 
 	reqSub chan struct{int64}
@@ -40,7 +44,7 @@ type CounterAgent struct {
 func NewCounterAgent(start int64) CounterAgent {
 	agent := CounterAgent {
 		NewCounter(start),
-		make(chan struct{int64}),
+		make(chan struct{val, a, b int64}),
 		make(chan struct{int64}),
 		make(chan struct{int64}),
 		make(chan struct{int64}),
@@ -56,7 +60,11 @@ func NewCounterAgent(start int64) CounterAgent {
 }
 
 func (c CounterAgent) Add(val int64) int64 {
-	c.reqAdd <- struct{int64}{val}
+	c.reqAdd <- struct{
+		val int64
+		a int64
+		b int64
+	}{val, val, val}
 	res := <- c.resAdd
 	return res.int64
 }
