@@ -79,55 +79,8 @@ func (w AgentWriter) WriteAgent(out io.Writer) {
 							// Request and response channels for the wrapped method.
 							fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(mType))
 							fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(mType))
-
-							//for _, name := range(method.Names) {
-								//fmt.Fprintf(out, "\t%s(", name)
-
-								//// Parameter types
-								//for i, param := range(mType.Params.List) {
-									//if i != 0 {
-										//fmt.Fprint(out, ", ")
-									//}
-
-									//for j, pname := range(param.Names) {
-										//if j == 0 {
-											//fmt.Fprintf(out, "%s", pname)
-										//} else {
-											//fmt.Fprintf(out, ", %s", pname)
-										//}
-									//}
-
-									//fmt.Fprint(out, " ")
-									//printer.Fprint(out, fset, param.Type)
-								//}
-
-								//fmt.Fprintf(out, ") (")
-
-								//// Return types
-								//for i, param := range(mType.Results.List) {
-									//if i != 0 {
-										//fmt.Fprint(out, ", ")
-									//}
-
-									//for j, pname := range(param.Names) {
-										//if j == 0 {
-											//fmt.Fprintf(out, "%s", pname)
-										//} else {
-											//fmt.Fprintf(out, ", %s", pname)
-										//}
-									//}
-
-									//if i != 0 {
-										//fmt.Fprint(out, " ")
-									//}
-									
-									//printer.Fprint(out, fset, param.Type)
-								//}
-
-								//fmt.Fprintf(out, ")\n")
 						}
 
-						// TODO: interface methods
 						fmt.Fprintln(out, "}\n")
 						return
 					}
