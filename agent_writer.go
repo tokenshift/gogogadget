@@ -69,10 +69,67 @@ func (w AgentWriter) WriteAgent(out io.Writer) {
 		fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
 	}
 
+	// Close the FooAgent type definition.
 	fmt.Fprintln(out, "}\n")
+
+	// Create method wrappers.
+	for method := range w.interfaceMethods() {
+		fmt.Fprintf(out,
+			"func (agent %sAgent) %s(%s) (%s) {\n",
+			w.InterfaceName,
+			method.Names[0],
+			w.methodParams(method.Type.(*ast.FuncType)),
+			w.methodReturns(method.Type.(*ast.FuncType)))
+
+		// Send the method arguments as a message to the req channel.
+		fmt.Fprintf(out,
+			"\tagent.req%s <- struct{%s}{\n",
+			method.Names[0],
+			w.methodParams(method.Type.(*ast.FuncType)))
+		for i, param := range method.Type.(*ast.FuncType).Params.List {
+			for _, pname := range param.Names {
+				fmt.Fprintf(out, "\t\t%s: %s,\n", pname, pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "\t\targ%d: arg%d,\n", i+1, i+1)
+			}
+		}
+		fmt.Fprintln(out, "\t}\n")
+
+		// Receive the return value(s) on the res channel.
+		fmt.Fprintf(out, "\tres := <- agent.res%s\n", method.Names[0])
+		fmt.Fprint(out, "\treturn ")
+		for i, param := range method.Type.(*ast.FuncType).Results.List {
+			if i > 0 {
+				fmt.Fprint(out, ", ")
+			}
+
+			for _, pname := range param.Names {
+				fmt.Fprintf(out, "res.%s", pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "rest.rval%d", i+1)
+			}
+		}
+		fmt.Fprintln(out, "")
+
+		fmt.Fprintln(out, "}\n")
+	}
 }
 
-func (w AgentWriter) fieldList(fields *ast.FieldList) string {
+//func (c CounterAgent) Add(val int64) int64 {
+	//c.reqAdd <- struct{
+		//val int64
+		//a int64
+		//b int64
+	//}{val, val, val}
+	//res := <- c.resAdd
+	//return res.int64
+//}
+
+func (w AgentWriter) fieldList(fields *ast.FieldList, argPrefix string) string {
 	var out bytes.Buffer
 
 	for i, param := range(fields.List) {
@@ -92,7 +149,7 @@ func (w AgentWriter) fieldList(fields *ast.FieldList) string {
 		if len(param.Names) == 0 {
 			// Give the arg an arbitrary name, since anonymous structs can't
 			// otherwise have multiple fields of the same type.
-			fmt.Fprintf(&out, "r%d ", i+1)
+			fmt.Fprintf(&out, "%s%d ", argPrefix, i+1)
 		}
 
 		printer.Fprint(&out, w.fset, param.Type)
@@ -131,9 +188,9 @@ func (w AgentWriter) interfaceMethods() <-chan *ast.Field {
 }
 
 func (w AgentWriter) methodParams(mtype *ast.FuncType) string {
-	return w.fieldList(mtype.Params)
+	return w.fieldList(mtype.Params, "arg")
 }
 
 func (w AgentWriter) methodReturns(mtype *ast.FuncType) string {
-	return w.fieldList(mtype.Results)
+	return w.fieldList(mtype.Results, "rval")
 }
