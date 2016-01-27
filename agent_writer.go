@@ -69,6 +69,10 @@ func (w AgentWriter) WriteAgentType(out io.Writer) {
 		fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
 	}
 
+	// Agent signal channel and run state.
+	fmt.Fprintln(out, "\tsignal chan AgentSignal")
+	fmt.Fprintln(out, "\tstate AgentState")
+
 	// Close the FooAgent type definition.
 	fmt.Fprintln(out, "}\n")
 }
@@ -109,6 +113,8 @@ func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
 			"\t\tmake(chan struct{%s}),\n",
 			w.methodReturns(method.Type.(*ast.FuncType)))
 	}
+	fmt.Fprintln(out, "\t\tmake(chan AgentSignal),")
+	fmt.Fprintln(out, "\t\tAGENT_STARTED,")
 	fmt.Fprintln(out, "\t}\n")
 
 	// Start the FooAgent runLoop.
@@ -120,22 +126,128 @@ func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
 	fmt.Fprintln(out, "}\n")
 }
 
-//func NewCounterAgent(start int64) CounterAgent {
-	//agent := CounterAgent {
-		//NewCounter(start),
-		//make(chan struct{val, a, b int64}),
-		//make(chan struct{int64}),
-		//make(chan struct{int64}),
-		//make(chan struct{int64}),
-		//make(chan struct{}),
-		//make(chan struct{int64}),
-		//make(chan AgentSignal),
-		//AGENT_STARTED,
+func (w AgentWriter) WriteAgentControl(out io.Writer) {
+	// Generate agent run loop.
+	fmt.Fprintf(out, "func (agent *%sAgent) runLoop() {", w.InterfaceName)
+	fmt.Fprintln(out, `
+	for {
+		select {
+		case signal := <-agent.signal:
+			switch signal {
+			case AGENT_START:
+				agent.state = AGENT_STARTED
+			case AGENT_STOP:
+				agent.state = AGENT_STOPPED
+			case AGENT_CLOSE:
+				agent.state = AGENT_CLOSED
+				agent.close()
+				return
+			}`)
+
+	for method := range(w.interfaceMethods()) {
+		fmt.Fprintf(out, "\t\tcase msg := <-agent.req%s:\n", method.Names[0])
+		for i, param := range method.Type.(*ast.FuncType).Results.List {
+			if i > 0 {
+				fmt.Fprint(out, ", ")
+			}
+
+			for _, pname := range param.Names {
+				fmt.Fprint(out, pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "\t\t\trval%d", i+1)
+			}
+		}
+		fmt.Fprintf(out, " := agent.wrapped.%s(", method.Names[0])
+		for i, param := range method.Type.(*ast.FuncType).Params.List {
+			if i > 0 {
+				fmt.Fprint(out, ", ")
+			}
+
+			for _, pname := range param.Names {
+				fmt.Fprintf(out, "msg.%s", pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "\t\t\tmsg.arg%d", i+1)
+			}
+		}
+		fmt.Fprintln(out, ")")
+
+		fmt.Fprintf(out,
+			"\t\t\tagent.res%s<- struct{%s}{",
+			method.Names[0],
+			w.methodReturns(method.Type.(*ast.FuncType)))
+		for i, param := range method.Type.(*ast.FuncType).Results.List {
+			if i > 0 {
+				fmt.Fprint(out, ", ")
+			}
+
+			for _, pname := range param.Names {
+				fmt.Fprint(out, pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "rval%d", i+1)
+			}
+		}
+
+		fmt.Fprint(out, "}\n")
+	}
+
+	fmt.Fprintln(out, "\t\t}\n\t}\n}\n")
+}
+
+
+//func (c CounterAgent) runLoop() {
+	//for {
+		//select {
+		//case signal := <-c.signal:
+			//switch signal {
+			//case AGENT_START:
+				//c.state = AGENT_STARTED
+			//case AGENT_STOP:
+				//c.state = AGENT_STOPPED
+			//case AGENT_CLOSE:
+				//c.state = AGENT_CLOSED
+				//c.close()
+				//return
+			//}
+		//case msg := <-c.reqAdd:
+			//c.resAdd<- struct{int64}{c.wrapped.Add(msg.int64)}
+		//case msg := <-c.reqSub:
+			//c.resSub<- struct{int64}{c.wrapped.Sub(msg.int64)}
+		//case _ = <-c.reqTotal:
+			//c.resTotal<- struct{int64}{c.wrapped.Total()}
+		//}
 	//}
+//}
 
-	//go agent.runLoop()
+//func (c CounterAgent) close() {
+	//close(c.reqAdd)
+	//close(c.resAdd)
+	//close(c.reqSub)
+	//close(c.resSub)
+	//close(c.reqTotal)
+	//close(c.resTotal)
+	//close(c.signal)
+//}
 
-	//return agent
+//func (c CounterAgent) Start() {
+	//c.signal <- AGENT_START
+//}
+
+//func (c CounterAgent) Stop() {
+	//c.signal <- AGENT_STOP
+//}
+
+//func (c CounterAgent) Close() {
+	//c.signal <- AGENT_CLOSE
+//}
+
+//func (c CounterAgent) State() AgentState {
+	//return c.state
 //}
 
 func (w AgentWriter) WriteAgentMethods(out io.Writer) {

@@ -79,6 +79,8 @@ func main() {
 	}
 
 	writer.WriteAgentMethods(os.Stdout)
+
+	writer.WriteAgentControl(os.Stdout)
 }
 
 func fatalError(err error) {
