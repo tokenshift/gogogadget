@@ -58,7 +58,7 @@ func (w AgentWriter) WritePackageName(out io.Writer) {
 	fmt.Fprintf(out, "package %s\n\n", w.PackageName)
 }
 
-func (w AgentWriter) WriteAgent(out io.Writer) {
+func (w AgentWriter) WriteAgentType(out io.Writer) {
 	// FooAgent type and wrapped interface.
 	fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
 	fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
@@ -71,7 +71,74 @@ func (w AgentWriter) WriteAgent(out io.Writer) {
 
 	// Close the FooAgent type definition.
 	fmt.Fprintln(out, "}\n")
+}
 
+func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
+	constructor := w.findConstructor(cname)
+	fmt.Fprintf(out,
+		"func %sAgent(%s) %sAgent {\n",
+		cname,
+		w.methodParams(constructor),
+		w.InterfaceName)
+
+	// Call the wrapped constructor.
+	fmt.Fprintf(out, "\twrapped := %s(", cname)
+	for i, param := range constructor.Params.List {
+		if i > 0 {
+			fmt.Fprint(out, ", ")
+		}
+
+		for _, pname := range param.Names {
+			fmt.Fprint(out, pname)
+		}
+
+		if len(param.Names) == 0 {
+			fmt.Fprintf(out, "arg%d", i+1, i+1)
+		}
+	}
+	fmt.Fprint(out, ")\n")
+
+	// Initialize the FooAgent with the wrapped object and req/res channels.
+	fmt.Fprintf(out, "\tagent := %sAgent{\n", w.InterfaceName)
+	fmt.Fprintln(out, "\t\twrapped,")
+	for method := range(w.interfaceMethods()) {
+		fmt.Fprintf(out,
+			"\t\tmake(chan struct{%s}),\n",
+			w.methodParams(method.Type.(*ast.FuncType)))
+		fmt.Fprintf(out,
+			"\t\tmake(chan struct{%s}),\n",
+			w.methodReturns(method.Type.(*ast.FuncType)))
+	}
+	fmt.Fprintln(out, "\t}\n")
+
+	// Start the FooAgent runLoop.
+	fmt.Fprintln(out, "\tgo agent.runLoop()\n")
+
+	// Return the FooAgent.
+	fmt.Fprintln(out, "\treturn agent")
+
+	fmt.Fprintln(out, "}\n")
+}
+
+//func NewCounterAgent(start int64) CounterAgent {
+	//agent := CounterAgent {
+		//NewCounter(start),
+		//make(chan struct{val, a, b int64}),
+		//make(chan struct{int64}),
+		//make(chan struct{int64}),
+		//make(chan struct{int64}),
+		//make(chan struct{}),
+		//make(chan struct{int64}),
+		//make(chan AgentSignal),
+		//AGENT_STARTED,
+	//}
+
+	//go agent.runLoop()
+
+	//return agent
+//}
+
+func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 	// Create method wrappers.
 	for method := range w.interfaceMethods() {
 		fmt.Fprintf(out,
@@ -119,16 +186,6 @@ func (w AgentWriter) WriteAgent(out io.Writer) {
 	}
 }
 
-//func (c CounterAgent) Add(val int64) int64 {
-	//c.reqAdd <- struct{
-		//val int64
-		//a int64
-		//b int64
-	//}{val, val, val}
-	//res := <- c.resAdd
-	//return res.int64
-//}
-
 func (w AgentWriter) fieldList(fields *ast.FieldList, argPrefix string) string {
 	var out bytes.Buffer
 
@@ -156,6 +213,16 @@ func (w AgentWriter) fieldList(fields *ast.FieldList, argPrefix string) string {
 	}
 
 	return out.String()
+}
+
+func (w AgentWriter) findConstructor(cname string) *ast.FuncType {
+	for _, decl := range(w.Input.Decls) {
+		if fdecl, ok := decl.(*ast.FuncDecl); ok && fdecl.Name.Name == cname {
+			return fdecl.Type
+		}
+	}
+
+	panic(fmt.Errorf("Failed to locate constructor %s", cname))
 }
 
 func (w AgentWriter) interfaceMethods() <-chan *ast.Field {

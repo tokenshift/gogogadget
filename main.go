@@ -71,8 +71,14 @@ func main() {
 	}
 
 	if inputFile != "" {
-		writer.WriteAgent(os.Stdout)
+		writer.WriteAgentType(os.Stdout)
 	}
+
+	for _, constructor := range constructors {
+		writer.WriteConstructor(os.Stdout, constructor)
+	}
+
+	writer.WriteAgentMethods(os.Stdout)
 }
 
 func fatalError(err error) {
