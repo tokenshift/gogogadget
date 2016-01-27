@@ -7,6 +7,8 @@ import (
 	"go/printer"
 	"go/token"
 	"io"
+
+	m "github.com/hoisie/mustache"
 )
 
 type AgentWriter struct {
@@ -24,14 +26,12 @@ func NewAgentWriter(interfaceName, packageName string, parsed *ast.File) AgentWr
 	}
 }
 
-func WriteCodeGenerationWarning(out io.Writer) {
-	fmt.Fprintln(out, "// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget")
-	fmt.Fprintln(out, "// ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN")
-	fmt.Fprintln(out, "")
-}
+// Code generation warning added to the top of every output file.
+const CODE_GENERATION_WARNING = `// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget
+// ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN`
 
-func WriteAgentInterface(out io.Writer) {
-	fmt.Fprintln(out, `type Agent interface {
+// The generic agent interface, including control methods and signal and state types.
+const AGENT_INTERFACE = `type Agent interface {
 	Start()
 	Stop()
 	Close()
@@ -50,8 +50,30 @@ const (
 	AGENT_STARTED AgentState = iota
 	AGENT_STOPPED
 	AGENT_CLOSED
-)`)
-	fmt.Fprintln(out, "")
+)`
+
+// Agent type, containing message and signal channels and the wrapped implementation.
+var tmplAgentType, _ = m.ParseString(`type {{InterfaceName}}Agent struct {
+	wrapped {{InterfaceName}}
+	signal chan AgentSignal
+	state AgentStat{{#Methods}}
+
+
+	req{{Name}} chan {{RequestType}}
+	res{{Name}} chan {{ResponseType}}{{/Methods}}
+}`)
+
+type tmplAgentTypeParams struct{
+	InterfaceName string
+	Methods []struct{Name, RequestType, ResponseType string}
+}
+
+func WriteCodeGenerationWarning(out io.Writer) {
+	fmt.Fprintln(out, CODE_GENERATION_WARNING, "\n")
+}
+
+func WriteAgentInterface(out io.Writer) {
+	fmt.Fprintln(out, AGENT_INTERFACE, "\n")
 }
 
 func (w AgentWriter) WritePackageName(out io.Writer) {
@@ -59,22 +81,36 @@ func (w AgentWriter) WritePackageName(out io.Writer) {
 }
 
 func (w AgentWriter) WriteAgentType(out io.Writer) {
-	// FooAgent type and wrapped interface.
-	fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
-	fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
-
-	// Request and response channels for each wrapped method.
-	for method := range(w.interfaceMethods()) {
-		fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(method.Type.(*ast.FuncType)))
-		fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
+	params := tmplAgentTypeParams{
+		InterfaceName: w.InterfaceName,
 	}
 
-	// Agent signal channel and run state.
-	fmt.Fprintln(out, "\tsignal chan AgentSignal")
-	fmt.Fprintln(out, "\tstate AgentState")
+	for method := range(w.interfaceMethods()) {
+		params.Methods = append(params.Methods, struct{Name, RequestType, ResponseType string}{
+			method.Names[0].Name,
+			w.methodParams(method.Type.(*ast.FuncType)),
+			w.methodReturns(method.Type.(*ast.FuncType)),
+		})
+	}
 
-	// Close the FooAgent type definition.
-	fmt.Fprintln(out, "}\n")
+	fmt.Fprintln(out, tmplAgentType.Render(params), "\n")
+
+	//// FooAgent type and wrapped interface.
+	//fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
+	//fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
+
+	//// Request and response channels for each wrapped method.
+	//for method := range(w.interfaceMethods()) {
+		//fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(method.Type.(*ast.FuncType)))
+		//fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
+	//}
+
+	//// Agent signal channel and run state.
+	//fmt.Fprintln(out, "\tsignal chan AgentSignal")
+	//fmt.Fprintln(out, "\tstate AgentState")
+
+	//// Close the FooAgent type definition.
+	//fmt.Fprintln(out, "}\n")
 }
 
 func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
@@ -198,7 +234,6 @@ func (w AgentWriter) WriteAgentControl(out io.Writer) {
 
 	fmt.Fprintln(out, "\t\t}\n\t}\n}\n")
 }
-
 
 //func (c CounterAgent) runLoop() {
 	//for {
@@ -371,5 +406,13 @@ func (w AgentWriter) methodParams(mtype *ast.FuncType) string {
 }
 
 func (w AgentWriter) methodReturns(mtype *ast.FuncType) string {
-	return w.fieldList(mtype.Results, "rval")
+	return w.fieldList(mtype.Results, "r")
+}
+
+func (w AgentWriter) requestType(mtype *ast.FuncType) string {
+	return fmt.Sprint("struct{", w.methodParams(mtype), "}")
+}
+
+func (w AgentWriter) responseType(mtype *ast.FuncType) string {
+	return fmt.Sprint("struct{", w.methodReturns(mtype), "}")
 }
