@@ -59,35 +59,17 @@ func (w AgentWriter) WritePackageName(out io.Writer) {
 }
 
 func (w AgentWriter) WriteAgent(out io.Writer) {
-	for _, decl := range(w.Input.Decls) {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
-			for _, spec := range(genDecl.Specs) {
-				tspec := spec.(*ast.TypeSpec)
-				if tspec.Name.Name == w.InterfaceName {
-					if iface, ok := tspec.Type.(*ast.InterfaceType); ok {
-						// FooAgent type and wrapped interface.
-						fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
-						fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
+	// FooAgent type and wrapped interface.
+	fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
+	fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
 
-						for _, method := range(iface.Methods.List) {
-							mType := method.Type.(*ast.FuncType)
-							// TODO: Is there any case where an interface method
-							// might have more than one name? The AST type supports
-							// it, but I can't think of any valid construct for
-							// such a method.
-
-							// Request and response channels for the wrapped method.
-							fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(mType))
-							fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(mType))
-						}
-
-						fmt.Fprintln(out, "}\n")
-						return
-					}
-				}
-			}
-		}
+	// Request and response channels for each wrapped method.
+	for method := range(w.interfaceMethods()) {
+		fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(method.Type.(*ast.FuncType)))
+		fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
 	}
+
+	fmt.Fprintln(out, "}\n")
 }
 
 func (w AgentWriter) fieldList(fields *ast.FieldList) string {
@@ -119,6 +101,35 @@ func (w AgentWriter) fieldList(fields *ast.FieldList) string {
 	return out.String()
 }
 
+func (w AgentWriter) interfaceMethods() <-chan *ast.Field {
+	out := make(chan *ast.Field)
+
+	go func() {
+		for _, decl := range(w.Input.Decls) {
+			if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
+				for _, spec := range(genDecl.Specs) {
+					tspec := spec.(*ast.TypeSpec)
+					if tspec.Name.Name == w.InterfaceName {
+						if iface, ok := tspec.Type.(*ast.InterfaceType); ok {
+							for _, method := range(iface.Methods.List) {
+								// TODO: Is there any case where an interface method
+								// might have more than one name? The AST type supports
+								// it, but I can't think of any valid construct for
+								// such a method.
+								out <- method
+							}
+						}
+					}
+				}
+			}
+		}
+
+		close(out)
+	}()
+
+	return out
+}
+
 func (w AgentWriter) methodParams(mtype *ast.FuncType) string {
 	return w.fieldList(mtype.Params)
 }
@@ -126,19 +137,3 @@ func (w AgentWriter) methodParams(mtype *ast.FuncType) string {
 func (w AgentWriter) methodReturns(mtype *ast.FuncType) string {
 	return w.fieldList(mtype.Results)
 }
-
-// type CounterAgent struct {
-// 	wrapped Counter
-
-// 	reqAdd chan struct{int64}
-// 	resAdd chan struct{int64}
-
-// 	reqSub chan struct{int64}
-// 	resSub chan struct{int64}
-
-// 	reqTotal chan struct{}
-// 	resTotal chan struct{int64}
-
-// 	signal chan AgentSignal
-// 	state AgentState
-// }
