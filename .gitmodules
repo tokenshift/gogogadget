@@ -1,0 +1,9 @@
+[submodule "vendor/github.com/alecthomas/units"]
+	path = vendor/github.com/alecthomas/units
+	url = https://github.com/alecthomas/units.git
+[submodule "vendor/github.com/alecthomas/template"]
+	path = vendor/github.com/alecthomas/template
+	url = https://github.com/alecthomas/template.git
+[submodule "vendor/github.com/alecthomas/kingpin"]
+	path = vendor/github.com/alecthomas/kingpin
+	url = https://github.com/alecthomas/kingpin.git

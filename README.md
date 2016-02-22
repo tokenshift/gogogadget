@@ -2,8 +2,8 @@
 
 Generate agents from Go interfaces.
 
-## Use
+## Example
 
 ```
-gogogadget -i Counter -c NewCounter examples/counter.go
+gogogadget examples/counter.go -p examples -i Counter -c NewCounter
 ```

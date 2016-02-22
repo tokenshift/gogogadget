@@ -6,81 +6,49 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"strings"
+
+	"github.com/alecthomas/kingpin"
+)
+
+var (
+	inputFiles   = kingpin.Arg("sources", "Input source files.").Required().Strings()
+	packageName  = kingpin.Flag("package", "The output package name.").Short('p').Required().String()
+	interfaces   = kingpin.Flag("interface", "The name of the interface that will be wrapped.").Short('i').Required().Strings()
+	constructors = kingpin.Flag("constructor", "The name of a constructor that will be wrapped.").Short('c').Strings()
 )
 
 func main() {
-	var err error
-	var interfaceName, packageName, inputFile string
-	var constructors []string
-	var createAgentInterface bool
+	kingpin.Parse()
 
-	if os.Args[1] != "agent" {
-		fatalError(fmt.Errorf("Unrecognized command: %s", os.Args[1]))
-	}
+	fmt.Println(inputFiles)
+	fmt.Println(*packageName)
+	fmt.Println(interfaces)
+	fmt.Println(constructors)
 
-	if len(os.Args) < 3 {
-		fatalError(fmt.Errorf("Please provide an interface name."))
-	}
-
-	interfaceName = os.Args[2]
-
-	for i := 3; i < len(os.Args); i++ {
-		arg := os.Args[i]
-
-		if strings.HasPrefix(arg, "-") {
-			switch arg[1:] {
-			case "i":
-				if inputFile != "" {
-					fatalError(fmt.Errorf("Only one input file can be specified."))
-				}
-				inputFile = os.Args[i+1]
-				i++
-			case "c":
-				constructors = append(constructors, os.Args[i+1])
-				i++
-			case "p":
-				if packageName != "" {
-					fatalError(fmt.Errorf("Only one package name can be specified."))
-				}
-				packageName = os.Args[i+1]
-				i++
-			case "I":
-				createAgentInterface = true
-			default:
-				fatalError(fmt.Errorf("Unrecognized option: %s", arg))
-			}
-		} else {
-			fatalError(fmt.Errorf("Unexpected parameter: %s", os.Args[i]))
+		/*
+		var parsed *ast.File
+		var writer AgentWriter
+		if inputFile != "" {
+			parsed, err = parseFile(inputFile)
+			fatalError(err)
+			writer = NewAgentWriter(interfaceName, packageName, parsed)
 		}
-	}
 
-	var parsed *ast.File
-	var writer AgentWriter
-	if inputFile != "" {
-		parsed, err = parseFile(inputFile)
-		fatalError(err)
-		writer = NewAgentWriter(interfaceName, packageName, parsed)
-	}
+		WriteCodeGenerationWarning(os.Stdout)
+		writer.WritePackageName(os.Stdout)
 
-	WriteCodeGenerationWarning(os.Stdout)
-	writer.WritePackageName(os.Stdout)
+		if inputFile != "" {
+			writer.WriteAgentType(os.Stdout)
+		}
 
-	if createAgentInterface {
-		WriteAgentInterface(os.Stdout)
-	}
+		for _, constructor := range constructors {
+			writer.WriteConstructor(os.Stdout, constructor)
+		}
 
-	if inputFile != "" {
-		writer.WriteAgentType(os.Stdout)
-	}
+		writer.WriteAgentMethods(os.Stdout)
 
-	for _, constructor := range constructors {
-		writer.WriteConstructor(os.Stdout, constructor)
-	}
-
-	writer.WriteAgentMethods(os.Stdout)
-
-	writer.WriteAgentControl(os.Stdout)
+		writer.WriteAgentControl(os.Stdout)
+		*/
 }
 
 func fatalError(err error) {

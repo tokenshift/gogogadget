@@ -30,28 +30,6 @@ func NewAgentWriter(interfaceName, packageName string, parsed *ast.File) AgentWr
 const CODE_GENERATION_WARNING = `// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget
 // ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN`
 
-// The generic agent interface, including control methods and signal and state types.
-const AGENT_INTERFACE = `type Agent interface {
-	Start()
-	Stop()
-	Close()
-	State() AgentState
-}
-
-type AgentSignal byte
-const (
-	AGENT_START AgentSignal = iota
-	AGENT_STOP
-	AGENT_CLOSE
-)
-
-type AgentState byte
-const (
-	AGENT_STARTED AgentState = iota
-	AGENT_STOPPED
-	AGENT_CLOSED
-)`
-
 // Agent type, containing message and signal channels and the wrapped implementation.
 var tmplAgentType, _ = m.ParseString(`type {{InterfaceName}}Agent struct {
 	wrapped {{InterfaceName}}
@@ -70,10 +48,6 @@ type tmplAgentTypeParams struct{
 
 func WriteCodeGenerationWarning(out io.Writer) {
 	fmt.Fprintln(out, CODE_GENERATION_WARNING, "\n")
-}
-
-func WriteAgentInterface(out io.Writer) {
-	fmt.Fprintln(out, AGENT_INTERFACE, "\n")
 }
 
 func (w AgentWriter) WritePackageName(out io.Writer) {
