@@ -31,7 +31,8 @@ const CODE_GENERATION_WARNING = `// THIS CODE WAS GENERATED USING github.com/tok
 // ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN`
 
 func WriteCodeGenerationWarning(out io.Writer) {
-	fmt.Fprintln(out, CODE_GENERATION_WARNING, "\n")
+	fmt.Fprintln(out, CODE_GENERATION_WARNING)
+	fmt.Fprint(out, "\n")
 }
 
 func (w AgentWriter) WritePackageName(out io.Writer) {
@@ -46,7 +47,7 @@ func WriteLibImport(out io.Writer) {
 var tmplAgentType = template(`type {{InterfaceName}}Agent struct {
 	wrapped {{InterfaceName}}
 	signal chan AgentSignal
-	state AgentStat{{#Methods}}
+	state AgentState{{#Methods}}
 
 
 	req{{Name}} chan {{RequestType}}
@@ -71,7 +72,8 @@ func (w AgentWriter) WriteAgentType(out io.Writer) {
 		})
 	}
 
-	fmt.Fprintln(out, tmplAgentType.Render(params), "\n")
+	fmt.Fprintln(out, tmplAgentType.Render(params))
+	fmt.Fprint(out, "\n")
 }
 
 func (w AgentWriter) WriteAgentMethods(out io.Writer) {
@@ -86,7 +88,7 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 
 		// Send the method arguments as a message to the req channel.
 		fmt.Fprintf(out,
-			"\tagent.req%s <- struct{%s}{\n",
+			"\tagent.req%s<- struct{%s}{\n",
 			method.Names[0],
 			w.methodParams(method.Type.(*ast.FuncType)))
 		for i, param := range method.Type.(*ast.FuncType).Params.List {
@@ -98,10 +100,10 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 				fmt.Fprintf(out, "\t\targ%d: arg%d,\n", i+1, i+1)
 			}
 		}
-		fmt.Fprintln(out, "\t}\n")
+		fmt.Fprintln(out, "\t}")
 
 		// Receive the return value(s) on the res channel.
-		fmt.Fprintf(out, "\tres := <- agent.res%s\n", method.Names[0])
+		fmt.Fprintf(out, "\tres := <-agent.res%s\n", method.Names[0])
 		fmt.Fprint(out, "\treturn ")
 		for i, param := range method.Type.(*ast.FuncType).Results.List {
 			if i > 0 {
@@ -113,7 +115,7 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 			}
 
 			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "rest.rval%d", i+1)
+				fmt.Fprintf(out, "res.val%d", i+1)
 			}
 		}
 		fmt.Fprintln(out, "")
@@ -124,15 +126,15 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 
 // Agent control functions.
 var tmplAgentControl = template(`func (agent {{InterfaceName}}Agent) Start() {
-	agent.signal <- AGENT_START
+	agent.signal<- AGENT_START
 }
 
 func (agent {{InterfaceName}}Agent) Stop() {
-	agent.signal <- AGENT_STOP
+	agent.signal<- AGENT_STOP
 }
 
 func (agent {{InterfaceName}}Agent) Close() {
-	agent.signal <- AGENT_CLOSE
+	agent.signal<- AGENT_CLOSE
 }
 
 func (agent {{InterfaceName}}Agent) State() AgentState {
@@ -140,7 +142,8 @@ func (agent {{InterfaceName}}Agent) State() AgentState {
 }`)
 
 func (w AgentWriter) WriteAgentControl(out io.Writer) {
-	fmt.Fprintln(out, tmplAgentControl.Render(w), "\n")
+	fmt.Fprintln(out, tmplAgentControl.Render(w))
+	fmt.Fprint(out, "\n")
 }
 
 // TODO: Find or write a Mustache template library that supports escaping
@@ -148,16 +151,18 @@ func (w AgentWriter) WriteAgentControl(out io.Writer) {
 var tmplRunLoop = template(`func (agent *{{InterfaceName}}Agent) runLoop() {
 	for {
 		select {
-		case signal := <-c.signal:
+		case signal := <-agent.signal:
 			switch signal {
 			case AGENT_START:
-				c.state = AGENT_STARTED
+				agent.state = AGENT_STARTED
 			case AGENT_STOP:
-				c.state = AGENT_STOPPED
+				agent.state = AGENT_STOPPED
 			case AGENT_CLOSE:
-				c.state = AGENT_CLOSED
-				{{#Methods}}close(agent.req{{MethodName}})
+				agent.state = AGENT_CLOSED{{#Methods}}
+
+				close(agent.req{{MethodName}})
 				close(agent.res{{MethodName}}){{/Methods}}
+				close(agent.signal)
 				return
 			}{{#Methods}}
 
@@ -230,7 +235,8 @@ func (w AgentWriter) WriteRunLoop(out io.Writer) {
 		params.Methods = append(params.Methods, mParams)
 	}
 
-	fmt.Fprintln(out, tmplRunLoop.Render(params), "\n")
+	fmt.Fprintln(out, tmplRunLoop.Render(params))
+	fmt.Fprint(out, "\n")
 }
 
 func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
@@ -261,6 +267,8 @@ func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
 	// Initialize the FooAgent with the wrapped object and req/res channels.
 	fmt.Fprintf(out, "\tagent := %sAgent{\n", w.InterfaceName)
 	fmt.Fprintln(out, "\t\twrapped,")
+	fmt.Fprintln(out, "\t\tmake(chan AgentSignal),")
+	fmt.Fprintln(out, "\t\tAGENT_STARTED,")
 	for method := range(w.interfaceMethods()) {
 		fmt.Fprintf(out,
 			"\t\tmake(chan struct{%s}),\n",
@@ -269,8 +277,6 @@ func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
 			"\t\tmake(chan struct{%s}),\n",
 			w.methodReturns(method.Type.(*ast.FuncType)))
 	}
-	fmt.Fprintln(out, "\t\tmake(chan AgentSignal),")
-	fmt.Fprintln(out, "\t\tAGENT_STARTED,")
 	fmt.Fprintln(out, "\t}\n")
 
 	// Start the FooAgent runLoop.
