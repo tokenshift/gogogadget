@@ -1,3 +1,6 @@
+// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget
+// ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN
+
 package examples
 
 import . "github.com/tokenshift/gogogadget/lib"

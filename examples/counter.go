@@ -1,4 +1,4 @@
-//go:generate gogogadget examples/counter.go -p examples -i Counter -c NewCounter > examples/counter_agent.go
+//go:generate gogogadget counter.go -p examples -i Counter -c NewCounter -o counter_agent_example.go
 
 package examples
 

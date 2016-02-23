@@ -5,19 +5,23 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 
 	"github.com/alecthomas/kingpin"
 )
 
 var (
-	inputFile     = kingpin.Arg("source", "Input source files.").Required().String()
+	inputFile     = kingpin.Arg("source", "Input source file.").Required().String()
+	outputFile    = kingpin.Flag("output", "Where the generated code will be written.").Short('o').String()
 	packageName   = kingpin.Flag("package", "The output package name.").Short('p').Required().String()
 	interfaceName = kingpin.Flag("interface", "The name of the interface that will be wrapped.").Short('i').Required().String()
 	constructors  = kingpin.Flag("constructor", "The name of a constructor that will be wrapped.").Short('c').Strings()
 )
 
 func main() {
+	var err error
+
 	kingpin.Parse()
 
 	parsed, err := parseFile(*inputFile)
@@ -25,17 +29,25 @@ func main() {
 
 	writer := NewAgentWriter(*interfaceName, *packageName, parsed)
 
-	WriteCodeGenerationWarning(os.Stdout)
-	writer.WritePackageName(os.Stdout)
-	WriteLibImport(os.Stdout)
+	var out io.Writer
+	if *outputFile == "" {
+		out = os.Stdout
+	} else {
+		out, err = os.Create(*outputFile)
+		fatalError(err)
+	}
 
-	writer.WriteAgentType(os.Stdout)
-	writer.WriteAgentMethods(os.Stdout)
-	writer.WriteAgentControl(os.Stdout)
-	writer.WriteRunLoop(os.Stdout)
+	WriteCodeGenerationWarning(out)
+	writer.WritePackageName(out)
+	WriteLibImport(out)
+
+	writer.WriteAgentType(out)
+	writer.WriteAgentMethods(out)
+	writer.WriteAgentControl(out)
+	writer.WriteRunLoop(out)
 
 	for _, constructor := range *constructors {
-		writer.WriteConstructor(os.Stdout, constructor)
+		writer.WriteConstructor(out, constructor)
 	}
 }
 
