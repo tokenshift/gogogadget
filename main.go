@@ -27,6 +27,7 @@ func main() {
 
 	WriteCodeGenerationWarning(os.Stdout)
 	writer.WritePackageName(os.Stdout)
+	WriteLibImport(os.Stdout)
 
 	writer.WriteAgentType(os.Stdout)
 

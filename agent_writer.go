@@ -54,6 +54,10 @@ func (w AgentWriter) WritePackageName(out io.Writer) {
 	fmt.Fprintf(out, "package %s\n\n", w.PackageName)
 }
 
+func WriteLibImport(out io.Writer) {
+	fmt.Fprintln(out, "import . \"github.com/tokenshift/gogogadget/lib\"\n")
+}
+
 func (w AgentWriter) WriteAgentType(out io.Writer) {
 	params := tmplAgentTypeParams{
 		InterfaceName: w.InterfaceName,
