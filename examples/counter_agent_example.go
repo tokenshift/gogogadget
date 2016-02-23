@@ -82,7 +82,7 @@ func (agent *CounterAgent) runLoop() {
 		case msg := <-agent.reqSub:
 			val1 := agent.wrapped.Sub(msg.val)
 			agent.resSub<- struct{val1 int64}{ val1 }
-		case msg := <-agent.reqTotal:
+		case _ = <-agent.reqTotal:
 			val1 := agent.wrapped.Total()
 			agent.resTotal<- struct{val1 int64}{ val1 }
 		}

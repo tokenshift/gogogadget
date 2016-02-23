@@ -166,7 +166,7 @@ var tmplRunLoop = template(`func (agent *{{InterfaceName}}Agent) runLoop() {
 				return
 			}{{#Methods}}
 
-		case msg := <-agent.req{{MethodName}}:
+		{{#AnyRequestArgs}}case msg := <-agent.req{{MethodName}}:{{/AnyRequestArgs}}{{^AnyRequestArgs}}case _ = <-agent.req{{MethodName}}:{{/AnyRequestArgs}}
 			{{ResponseArgs}} := agent.wrapped.{{MethodName}}({{RequestArgs}})
 			agent.res{{MethodName}}<- {{ResponseType}}{ {{ResponseArgs}} }{{/Methods}}
 		}
@@ -176,6 +176,7 @@ var tmplRunLoop = template(`func (agent *{{InterfaceName}}Agent) runLoop() {
 type tmplRunLoopParams struct {
 	InterfaceName string
 	Methods []struct {
+		AnyRequestArgs bool
 		MethodName, RequestArgs, ResponseArgs, ResponseType string
 	}
 }
@@ -225,7 +226,11 @@ func (w AgentWriter) WriteRunLoop(out io.Writer) {
 			}
 		}
 
-		mParams := struct{MethodName, RequestArgs, ResponseArgs, ResponseType string}{
+		mParams := struct {
+			AnyRequestArgs bool
+			MethodName, RequestArgs, ResponseArgs, ResponseType string
+		}{
+			AnyRequestArgs: len(method.Type.(*ast.FuncType).Params.List) > 0,
 			MethodName: method.Names[0].Name,
 			RequestArgs: requestArgs.String(),
 			ResponseArgs: responseArgs.String(),

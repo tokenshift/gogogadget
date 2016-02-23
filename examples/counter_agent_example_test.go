@@ -63,7 +63,7 @@ func TestExampleCounter(t *T) {
 	wg.Wait()
 
 	// Commented out because this is actually expected to fail.
-	// if counter.Total() != 0 {
-	// 	t.Errorf("Expected 0, got %v", counter.Total())
-	// }
+	/*if counter.Total() != 0 {
+		t.Errorf("Expected 0, got %v", counter.Total())
+	}*/
 }
