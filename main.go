@@ -34,9 +34,9 @@ func main() {
 	writer.WriteAgentControl(os.Stdout)
 	writer.WriteRunLoop(os.Stdout)
 
-	/*for _, constructor := range *constructors {
+	for _, constructor := range *constructors {
 		writer.WriteConstructor(os.Stdout, constructor)
-	}*/
+	}
 }
 
 func fatalError(err error) {
