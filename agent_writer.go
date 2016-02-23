@@ -66,8 +66,8 @@ func (w AgentWriter) WriteAgentType(out io.Writer) {
 	for method := range(w.interfaceMethods()) {
 		params.Methods = append(params.Methods, struct{Name, RequestType, ResponseType string}{
 			method.Names[0].Name,
-			w.methodParams(method.Type.(*ast.FuncType)),
-			w.methodReturns(method.Type.(*ast.FuncType)),
+			w.requestType(method.Type.(*ast.FuncType)),
+			w.responseType(method.Type.(*ast.FuncType)),
 		})
 	}
 
@@ -213,56 +213,6 @@ func (w AgentWriter) WriteAgentControl(out io.Writer) {
 	fmt.Fprintln(out, "\t\t}\n\t}\n}\n")
 }
 
-//func (c CounterAgent) runLoop() {
-	//for {
-		//select {
-		//case signal := <-c.signal:
-			//switch signal {
-			//case AGENT_START:
-				//c.state = AGENT_STARTED
-			//case AGENT_STOP:
-				//c.state = AGENT_STOPPED
-			//case AGENT_CLOSE:
-				//c.state = AGENT_CLOSED
-				//c.close()
-				//return
-			//}
-		//case msg := <-c.reqAdd:
-			//c.resAdd<- struct{int64}{c.wrapped.Add(msg.int64)}
-		//case msg := <-c.reqSub:
-			//c.resSub<- struct{int64}{c.wrapped.Sub(msg.int64)}
-		//case _ = <-c.reqTotal:
-			//c.resTotal<- struct{int64}{c.wrapped.Total()}
-		//}
-	//}
-//}
-
-//func (c CounterAgent) close() {
-	//close(c.reqAdd)
-	//close(c.resAdd)
-	//close(c.reqSub)
-	//close(c.resSub)
-	//close(c.reqTotal)
-	//close(c.resTotal)
-	//close(c.signal)
-//}
-
-//func (c CounterAgent) Start() {
-	//c.signal <- AGENT_START
-//}
-
-//func (c CounterAgent) Stop() {
-	//c.signal <- AGENT_STOP
-//}
-
-//func (c CounterAgent) Close() {
-	//c.signal <- AGENT_CLOSE
-//}
-
-//func (c CounterAgent) State() AgentState {
-	//return c.state
-//}
-
 func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 	// Create method wrappers.
 	for method := range w.interfaceMethods() {
@@ -311,7 +261,7 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 	}
 }
 
-func (w AgentWriter) fieldList(fields *ast.FieldList, argPrefix string) string {
+func (w AgentWriter) fieldList(fields *ast.FieldList) string {
 	var out bytes.Buffer
 
 	for i, param := range(fields.List) {
@@ -325,15 +275,15 @@ func (w AgentWriter) fieldList(fields *ast.FieldList, argPrefix string) string {
 			}
 
 			fmt.Fprint(&out, pname)
-			fmt.Fprint(&out, " ")
 		}
 
 		if len(param.Names) == 0 {
 			// Give the arg an arbitrary name, since anonymous structs can't
 			// otherwise have multiple fields of the same type.
-			fmt.Fprintf(&out, "%s%d ", argPrefix, i+1)
+			fmt.Fprintf(&out, "val%d", i+1)
 		}
 
+		fmt.Fprint(&out, " ")
 		printer.Fprint(&out, w.fset, param.Type)
 	}
 
@@ -380,11 +330,11 @@ func (w AgentWriter) interfaceMethods() <-chan *ast.Field {
 }
 
 func (w AgentWriter) methodParams(mtype *ast.FuncType) string {
-	return w.fieldList(mtype.Params, "arg")
+	return w.fieldList(mtype.Params)
 }
 
 func (w AgentWriter) methodReturns(mtype *ast.FuncType) string {
-	return w.fieldList(mtype.Results, "r")
+	return w.fieldList(mtype.Results)
 }
 
 func (w AgentWriter) requestType(mtype *ast.FuncType) string {

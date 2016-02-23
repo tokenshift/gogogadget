@@ -4,6 +4,8 @@ import . "github.com/tokenshift/gogogadget/lib"
 
 type CounterAgent struct {
 	wrapped Counter
+	signal chan AgentSignal
+	state AgentState
 
 	reqAdd chan struct{int64}
 	resAdd chan struct{int64}
@@ -13,22 +15,19 @@ type CounterAgent struct {
 
 	reqTotal chan struct{}
 	resTotal chan struct{int64}
-
-	signal chan AgentSignal
-	state AgentState
 }
 
 func NewCounterAgent(start int64) CounterAgent {
 	agent := CounterAgent {
 		NewCounter(start),
+		make(chan AgentSignal),
+		AGENT_STARTED,
 		make(chan struct{int64}),
 		make(chan struct{int64}),
 		make(chan struct{int64}),
 		make(chan struct{int64}),
 		make(chan struct{}),
 		make(chan struct{int64}),
-		make(chan AgentSignal),
-		AGENT_STARTED,
 	}
 
 	go agent.runLoop()

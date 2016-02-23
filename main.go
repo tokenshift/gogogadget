@@ -31,13 +31,13 @@ func main() {
 
 	writer.WriteAgentType(os.Stdout)
 
-	for _, constructor := range *constructors {
+	/*for _, constructor := range *constructors {
 		writer.WriteConstructor(os.Stdout, constructor)
 	}
 
 	writer.WriteAgentMethods(os.Stdout)
 
-	writer.WriteAgentControl(os.Stdout)
+	writer.WriteAgentControl(os.Stdout)*/
 }
 
 func fatalError(err error) {
