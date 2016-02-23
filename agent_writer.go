@@ -43,7 +43,7 @@ func WriteLibImport(out io.Writer) {
 }
 
 // Agent type, containing message and signal channels and the wrapped implementation.
-var tmplAgentType, _ = m.ParseString(`type {{InterfaceName}}Agent struct {
+var tmplAgentType = template(`type {{InterfaceName}}Agent struct {
 	wrapped {{InterfaceName}}
 	signal chan AgentSignal
 	state AgentStat{{#Methods}}
@@ -123,7 +123,7 @@ func (w AgentWriter) WriteAgentMethods(out io.Writer) {
 }
 
 // Agent control functions.
-var tmplAgentControl, _ = m.ParseString(`func (agent {{InterfaceName}}Agent) Start() {
+var tmplAgentControl = template(`func (agent {{InterfaceName}}Agent) Start() {
 	agent.signal <- AGENT_START
 }
 
@@ -140,80 +140,97 @@ func (agent {{InterfaceName}}Agent) State() AgentState {
 }`)
 
 func (w AgentWriter) WriteAgentControl(out io.Writer) {
-	fmt.Fprintln(out, tmplAgentControl.Render(w))
+	fmt.Fprintln(out, tmplAgentControl.Render(w), "\n")
 }
 
-func (w AgentWriter) WriteRunLoop(out io.Writer) {
-	// Generate agent run loop.
-	fmt.Fprintf(out, "func (agent *%sAgent) runLoop() {", w.InterfaceName)
-	fmt.Fprintln(out, `
+// TODO: Find or write a Mustache template library that supports escaping
+// curly braces.
+var tmplRunLoop = template(`func (agent *{{InterfaceName}}Agent) runLoop() {
 	for {
 		select {
-		case signal := <-agent.signal:
+		case signal := <-c.signal:
 			switch signal {
 			case AGENT_START:
-				agent.state = AGENT_STARTED
+				c.state = AGENT_STARTED
 			case AGENT_STOP:
-				agent.state = AGENT_STOPPED
+				c.state = AGENT_STOPPED
 			case AGENT_CLOSE:
-				agent.state = AGENT_CLOSED
-				agent.close()
+				c.state = AGENT_CLOSED
+				{{#Methods}}close(agent.req{{MethodName}})
+				close(agent.res{{MethodName}}){{/Methods}}
 				return
-			}`)
+			}{{#Methods}}
 
-	for method := range(w.interfaceMethods()) {
-		fmt.Fprintf(out, "\t\tcase msg := <-agent.req%s:\n", method.Names[0])
-		for i, param := range method.Type.(*ast.FuncType).Results.List {
-			if i > 0 {
-				fmt.Fprint(out, ", ")
-			}
-
-			for _, pname := range param.Names {
-				fmt.Fprint(out, pname)
-			}
-
-			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "\t\t\trval%d", i+1)
-			}
+		case msg := <-agent.req{{MethodName}}:
+			{{ResponseArgs}} := agent.wrapped.{{MethodName}}({{RequestArgs}})
+			agent.res{{MethodName}}<- {{ResponseType}}{ {{ResponseArgs}} }{{/Methods}}
 		}
-		fmt.Fprintf(out, " := agent.wrapped.%s(", method.Names[0])
-		for i, param := range method.Type.(*ast.FuncType).Params.List {
-			if i > 0 {
-				fmt.Fprint(out, ", ")
-			}
+	}
+}`)
 
-			for _, pname := range param.Names {
-				fmt.Fprintf(out, "msg.%s", pname)
-			}
+type tmplRunLoopParams struct {
+	InterfaceName string
+	Methods []struct {
+		MethodName, RequestArgs, ResponseArgs, ResponseType string
+	}
+}
 
-			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "\t\t\tmsg.arg%d", i+1)
-			}
-		}
-		fmt.Fprintln(out, ")")
 
-		fmt.Fprintf(out,
-			"\t\t\tagent.res%s<- struct{%s}{",
-			method.Names[0],
-			w.methodReturns(method.Type.(*ast.FuncType)))
-		for i, param := range method.Type.(*ast.FuncType).Results.List {
-			if i > 0 {
-				fmt.Fprint(out, ", ")
-			}
-
-			for _, pname := range param.Names {
-				fmt.Fprint(out, pname)
-			}
-
-			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "rval%d", i+1)
-			}
-		}
-
-		fmt.Fprint(out, "}\n")
+func (w AgentWriter) WriteRunLoop(out io.Writer) {
+	params := tmplRunLoopParams{
+		InterfaceName: w.InterfaceName,
 	}
 
-	fmt.Fprintln(out, "\t\t}\n\t}\n}\n")
+	for method := range(w.interfaceMethods()) {
+		var requestArgs bytes.Buffer
+		for i, param := range method.Type.(*ast.FuncType).Params.List {
+			if i > 0 {
+				fmt.Fprint(&requestArgs, ", ")
+			}
+
+			for j, pname := range param.Names {
+				if j > 0 {
+					fmt.Fprint(&requestArgs, ", ")
+				}
+
+				fmt.Fprintf(&requestArgs, "msg.%s", pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(&requestArgs, "msg.val%d", i+1)
+			}
+		}
+
+		var responseArgs bytes.Buffer
+		for i, param := range method.Type.(*ast.FuncType).Results.List {
+			if i > 0 {
+				fmt.Fprint(&responseArgs, ", ")
+			}
+
+			for j, pname := range param.Names {
+				if j > 0 {
+					fmt.Fprint(&responseArgs, ", ")
+				}
+
+				fmt.Fprint(&responseArgs, pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(&responseArgs, "val%d", i+1)
+			}
+		}
+
+		mParams := struct{MethodName, RequestArgs, ResponseArgs, ResponseType string}{
+			MethodName: method.Names[0].Name,
+			RequestArgs: requestArgs.String(),
+			ResponseArgs: responseArgs.String(),
+			ResponseType: w.responseType(method.Type.(*ast.FuncType)),
+		}
+
+		params.Methods = append(params.Methods, mParams)
+	}
+
+	fmt.Fprintln(out, tmplRunLoop.Render(params), "\n")
 }
 
 func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
@@ -347,4 +364,13 @@ func (w AgentWriter) requestType(mtype *ast.FuncType) string {
 
 func (w AgentWriter) responseType(mtype *ast.FuncType) string {
 	return fmt.Sprint("struct{", w.methodReturns(mtype), "}")
+}
+
+func template(source string) *m.Template {
+	t, err := m.ParseString(source)
+	if err != nil {
+		panic(err)
+	}
+
+	return t
 }

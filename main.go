@@ -32,7 +32,7 @@ func main() {
 	writer.WriteAgentType(os.Stdout)
 	writer.WriteAgentMethods(os.Stdout)
 	writer.WriteAgentControl(os.Stdout)
-	//writer.WriteRunLoop(os.Stdout)
+	writer.WriteRunLoop(os.Stdout)
 
 	/*for _, constructor := range *constructors {
 		writer.WriteConstructor(os.Stdout, constructor)
