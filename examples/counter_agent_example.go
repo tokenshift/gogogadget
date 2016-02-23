@@ -64,7 +64,13 @@ func (c *CounterAgent) runLoop() {
 				c.state = AGENT_STOPPED
 			case AGENT_CLOSE:
 				c.state = AGENT_CLOSED
-				c.close()
+				close(c.reqAdd)
+				close(c.resAdd)
+				close(c.reqSub)
+				close(c.resSub)
+				close(c.reqTotal)
+				close(c.resTotal)
+				close(c.signal)
 				return
 			}
 		case msg := <-c.reqAdd:
@@ -75,16 +81,6 @@ func (c *CounterAgent) runLoop() {
 			c.resTotal<- struct{int64}{c.wrapped.Total()}
 		}
 	}
-}
-
-func (c CounterAgent) close() {
-	close(c.reqAdd)
-	close(c.resAdd)
-	close(c.reqSub)
-	close(c.resSub)
-	close(c.reqTotal)
-	close(c.resTotal)
-	close(c.signal)
 }
 
 func (c CounterAgent) Start() {

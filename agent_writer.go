@@ -30,6 +30,18 @@ func NewAgentWriter(interfaceName, packageName string, parsed *ast.File) AgentWr
 const CODE_GENERATION_WARNING = `// THIS CODE WAS GENERATED USING github.com/tokenshift/gogogadget
 // ANY CHANGES TO THIS FILE MAY BE OVERWRITTEN`
 
+func WriteCodeGenerationWarning(out io.Writer) {
+	fmt.Fprintln(out, CODE_GENERATION_WARNING, "\n")
+}
+
+func (w AgentWriter) WritePackageName(out io.Writer) {
+	fmt.Fprintf(out, "package %s\n\n", w.PackageName)
+}
+
+func WriteLibImport(out io.Writer) {
+	fmt.Fprintln(out, "import . \"github.com/tokenshift/gogogadget/lib\"\n")
+}
+
 // Agent type, containing message and signal channels and the wrapped implementation.
 var tmplAgentType, _ = m.ParseString(`type {{InterfaceName}}Agent struct {
 	wrapped {{InterfaceName}}
@@ -46,18 +58,6 @@ type tmplAgentTypeParams struct{
 	Methods []struct{Name, RequestType, ResponseType string}
 }
 
-func WriteCodeGenerationWarning(out io.Writer) {
-	fmt.Fprintln(out, CODE_GENERATION_WARNING, "\n")
-}
-
-func (w AgentWriter) WritePackageName(out io.Writer) {
-	fmt.Fprintf(out, "package %s\n\n", w.PackageName)
-}
-
-func WriteLibImport(out io.Writer) {
-	fmt.Fprintln(out, "import . \"github.com/tokenshift/gogogadget/lib\"\n")
-}
-
 func (w AgentWriter) WriteAgentType(out io.Writer) {
 	params := tmplAgentTypeParams{
 		InterfaceName: w.InterfaceName,
@@ -72,75 +72,78 @@ func (w AgentWriter) WriteAgentType(out io.Writer) {
 	}
 
 	fmt.Fprintln(out, tmplAgentType.Render(params), "\n")
-
-	//// FooAgent type and wrapped interface.
-	//fmt.Fprintf(out, "type %sAgent struct {\n", w.InterfaceName)
-	//fmt.Fprintf(out, "\twrapped %s\n", w.InterfaceName)
-
-	//// Request and response channels for each wrapped method.
-	//for method := range(w.interfaceMethods()) {
-		//fmt.Fprintf(out, "\treq%s chan struct{%s}\n", method.Names[0], w.methodParams(method.Type.(*ast.FuncType)))
-		//fmt.Fprintf(out, "\tres%s chan struct{%s}\n", method.Names[0], w.methodReturns(method.Type.(*ast.FuncType)))
-	//}
-
-	//// Agent signal channel and run state.
-	//fmt.Fprintln(out, "\tsignal chan AgentSignal")
-	//fmt.Fprintln(out, "\tstate AgentState")
-
-	//// Close the FooAgent type definition.
-	//fmt.Fprintln(out, "}\n")
 }
 
-func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
-	constructor := w.findConstructor(cname)
-	fmt.Fprintf(out,
-		"func %sAgent(%s) %sAgent {\n",
-		cname,
-		w.methodParams(constructor),
-		w.InterfaceName)
-
-	// Call the wrapped constructor.
-	fmt.Fprintf(out, "\twrapped := %s(", cname)
-	for i, param := range constructor.Params.List {
-		if i > 0 {
-			fmt.Fprint(out, ", ")
-		}
-
-		for _, pname := range param.Names {
-			fmt.Fprint(out, pname)
-		}
-
-		if len(param.Names) == 0 {
-			fmt.Fprintf(out, "arg%d", i+1, i+1)
-		}
-	}
-	fmt.Fprint(out, ")\n")
-
-	// Initialize the FooAgent with the wrapped object and req/res channels.
-	fmt.Fprintf(out, "\tagent := %sAgent{\n", w.InterfaceName)
-	fmt.Fprintln(out, "\t\twrapped,")
-	for method := range(w.interfaceMethods()) {
+func (w AgentWriter) WriteAgentMethods(out io.Writer) {
+	// Create method wrappers.
+	for method := range w.interfaceMethods() {
 		fmt.Fprintf(out,
-			"\t\tmake(chan struct{%s}),\n",
-			w.methodParams(method.Type.(*ast.FuncType)))
-		fmt.Fprintf(out,
-			"\t\tmake(chan struct{%s}),\n",
+			"func (agent %sAgent) %s(%s) (%s) {\n",
+			w.InterfaceName,
+			method.Names[0],
+			w.methodParams(method.Type.(*ast.FuncType)),
 			w.methodReturns(method.Type.(*ast.FuncType)))
+
+		// Send the method arguments as a message to the req channel.
+		fmt.Fprintf(out,
+			"\tagent.req%s <- struct{%s}{\n",
+			method.Names[0],
+			w.methodParams(method.Type.(*ast.FuncType)))
+		for i, param := range method.Type.(*ast.FuncType).Params.List {
+			for _, pname := range param.Names {
+				fmt.Fprintf(out, "\t\t%s: %s,\n", pname, pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "\t\targ%d: arg%d,\n", i+1, i+1)
+			}
+		}
+		fmt.Fprintln(out, "\t}\n")
+
+		// Receive the return value(s) on the res channel.
+		fmt.Fprintf(out, "\tres := <- agent.res%s\n", method.Names[0])
+		fmt.Fprint(out, "\treturn ")
+		for i, param := range method.Type.(*ast.FuncType).Results.List {
+			if i > 0 {
+				fmt.Fprint(out, ", ")
+			}
+
+			for _, pname := range param.Names {
+				fmt.Fprintf(out, "res.%s", pname)
+			}
+
+			if len(param.Names) == 0 {
+				fmt.Fprintf(out, "rest.rval%d", i+1)
+			}
+		}
+		fmt.Fprintln(out, "")
+
+		fmt.Fprintln(out, "}\n")
 	}
-	fmt.Fprintln(out, "\t\tmake(chan AgentSignal),")
-	fmt.Fprintln(out, "\t\tAGENT_STARTED,")
-	fmt.Fprintln(out, "\t}\n")
-
-	// Start the FooAgent runLoop.
-	fmt.Fprintln(out, "\tgo agent.runLoop()\n")
-
-	// Return the FooAgent.
-	fmt.Fprintln(out, "\treturn agent")
-
-	fmt.Fprintln(out, "}\n")
 }
+
+// Agent control functions.
+var tmplAgentControl, _ = m.ParseString(`func (agent {{InterfaceName}}Agent) Start() {
+	agent.signal <- AGENT_START
+}
+
+func (agent {{InterfaceName}}Agent) Stop() {
+	agent.signal <- AGENT_STOP
+}
+
+func (agent {{InterfaceName}}Agent) Close() {
+	agent.signal <- AGENT_CLOSE
+}
+
+func (agent {{InterfaceName}}Agent) State() AgentState {
+	return agent.state
+}`)
 
 func (w AgentWriter) WriteAgentControl(out io.Writer) {
+	fmt.Fprintln(out, tmplAgentControl.Render(w))
+}
+
+func (w AgentWriter) WriteRunLoop(out io.Writer) {
 	// Generate agent run loop.
 	fmt.Fprintf(out, "func (agent *%sAgent) runLoop() {", w.InterfaceName)
 	fmt.Fprintln(out, `
@@ -213,52 +216,53 @@ func (w AgentWriter) WriteAgentControl(out io.Writer) {
 	fmt.Fprintln(out, "\t\t}\n\t}\n}\n")
 }
 
-func (w AgentWriter) WriteAgentMethods(out io.Writer) {
-	// Create method wrappers.
-	for method := range w.interfaceMethods() {
-		fmt.Fprintf(out,
-			"func (agent %sAgent) %s(%s) (%s) {\n",
-			w.InterfaceName,
-			method.Names[0],
-			w.methodParams(method.Type.(*ast.FuncType)),
-			w.methodReturns(method.Type.(*ast.FuncType)))
+func (w AgentWriter) WriteConstructor(out io.Writer, cname string) {
+	constructor := w.findConstructor(cname)
+	fmt.Fprintf(out,
+		"func %sAgent(%s) %sAgent {\n",
+		cname,
+		w.methodParams(constructor),
+		w.InterfaceName)
 
-		// Send the method arguments as a message to the req channel.
-		fmt.Fprintf(out,
-			"\tagent.req%s <- struct{%s}{\n",
-			method.Names[0],
-			w.methodParams(method.Type.(*ast.FuncType)))
-		for i, param := range method.Type.(*ast.FuncType).Params.List {
-			for _, pname := range param.Names {
-				fmt.Fprintf(out, "\t\t%s: %s,\n", pname, pname)
-			}
-
-			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "\t\targ%d: arg%d,\n", i+1, i+1)
-			}
+	// Call the wrapped constructor.
+	fmt.Fprintf(out, "\twrapped := %s(", cname)
+	for i, param := range constructor.Params.List {
+		if i > 0 {
+			fmt.Fprint(out, ", ")
 		}
-		fmt.Fprintln(out, "\t}\n")
 
-		// Receive the return value(s) on the res channel.
-		fmt.Fprintf(out, "\tres := <- agent.res%s\n", method.Names[0])
-		fmt.Fprint(out, "\treturn ")
-		for i, param := range method.Type.(*ast.FuncType).Results.List {
-			if i > 0 {
-				fmt.Fprint(out, ", ")
-			}
-
-			for _, pname := range param.Names {
-				fmt.Fprintf(out, "res.%s", pname)
-			}
-
-			if len(param.Names) == 0 {
-				fmt.Fprintf(out, "rest.rval%d", i+1)
-			}
+		for _, pname := range param.Names {
+			fmt.Fprint(out, pname)
 		}
-		fmt.Fprintln(out, "")
 
-		fmt.Fprintln(out, "}\n")
+		if len(param.Names) == 0 {
+			fmt.Fprintf(out, "arg%d", i+1, i+1)
+		}
 	}
+	fmt.Fprint(out, ")\n")
+
+	// Initialize the FooAgent with the wrapped object and req/res channels.
+	fmt.Fprintf(out, "\tagent := %sAgent{\n", w.InterfaceName)
+	fmt.Fprintln(out, "\t\twrapped,")
+	for method := range(w.interfaceMethods()) {
+		fmt.Fprintf(out,
+			"\t\tmake(chan struct{%s}),\n",
+			w.methodParams(method.Type.(*ast.FuncType)))
+		fmt.Fprintf(out,
+			"\t\tmake(chan struct{%s}),\n",
+			w.methodReturns(method.Type.(*ast.FuncType)))
+	}
+	fmt.Fprintln(out, "\t\tmake(chan AgentSignal),")
+	fmt.Fprintln(out, "\t\tAGENT_STARTED,")
+	fmt.Fprintln(out, "\t}\n")
+
+	// Start the FooAgent runLoop.
+	fmt.Fprintln(out, "\tgo agent.runLoop()\n")
+
+	// Return the FooAgent.
+	fmt.Fprintln(out, "\treturn agent")
+
+	fmt.Fprintln(out, "}\n")
 }
 
 func (w AgentWriter) fieldList(fields *ast.FieldList) string {
